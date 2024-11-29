@@ -14,7 +14,7 @@ app = Flask(__name__)
 # Get DB_URI from environ variable (useful for production/testing) or,
 # if not set there, use development local db.
 app.config['SQLALCHEMY_DATABASE_URI'] = (
-    os.environ.get('DATABASE_URL', 'postgresql://postgres:<password>@localhost/warbler'))
+    os.environ.get('DATABASE_URL', 'postgresql://postgres:Aa2000928#@localhost/warbler'))
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ECHO'] = False
@@ -68,7 +68,7 @@ def signup():
 
     form = UserAddForm()
 
-    if form.validate_on_submit():
+    if form.validate_on_submit():       
         try:
             user = User.signup(
                 username=form.username.data,
@@ -113,7 +113,10 @@ def login():
 @app.route('/logout')
 def logout():
     """Handle logout of user."""
+
     do_logout()
+
+    flash("Successfully logged out.", 'success')
     return redirect('/')
 
 
@@ -154,7 +157,9 @@ def users_show(user_id):
                 .order_by(Message.timestamp.desc())
                 .limit(100)
                 .all())
-    return render_template('users/show.html', user=user, messages=messages)
+    
+    likes = [message.id for message in user.likes]
+    return render_template('users/show.html', user=user, messages=messages, likes=likes)
 
 
 @app.route('/users/<int:user_id>/following')
@@ -305,6 +310,36 @@ def messages_destroy(message_id):
     return redirect(f"/users/{g.user.id}")
 
 
+@app.route('/messages/<int:message_id>/like', methods=["POST"])
+def like_message(message_id):
+    """Like a message."""
+    user = g.user
+    if not user:
+        flash("Unauthorized.", "danger")
+        return redirect("/")
+    
+    message = Message.query.get_or_404(message_id)
+    if message.user_id == user.id:
+        return redirect("/")
+    
+    if message in user.likes:
+        user.likes = [like for like in user.likes if like != message]
+    else:
+        user.likes.append(message)      
+
+    db.session.commit()
+    return redirect("/")
+
+@app.route('/users/<int:user_id>/likes', methods=["GET"])
+def show_likes(user_id):
+    if not g.user:
+        flash("Unauthorized.", "danger")
+        return redirect("/")    
+
+    user = User.query.get_or_404(user_id)
+    return render_template('users/likes.html', user=user, likes=user.likes)
+
+
 ##############################################################################
 # Homepage and error pages
 
@@ -318,13 +353,21 @@ def homepage():
     """
 
     if g.user:
+        following_ids = [f.id for f in g.user.following] + [g.user.id]
+
         messages = (Message
                     .query
                     .order_by(Message.timestamp.desc())
+                    .filter(
+                        (Message.user_id == g.user.id) |
+                        (Message.user_id.in_(following_ids))
+                )
                     .limit(100)
                     .all())
 
-        return render_template('home.html', messages=messages)
+        liked_ids = [msg.id for msg in g.user.likes]
+
+        return render_template('home.html', messages=messages, likes=liked_ids)
 
     else:
         return render_template('home-anon.html')

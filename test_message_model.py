@@ -5,7 +5,7 @@ from unittest import TestCase
 from models import db, User, Likes, Message
 from app import app
 
-os.environ['DATABASE_URL'] = "postgresql://postgres:Aa2000928#@localhost/warbler-test"
+os.environ['DATABASE_URL'] = "postgresql://postgres:<password>@localhost/warbler-test"
 
 from app import app
 
